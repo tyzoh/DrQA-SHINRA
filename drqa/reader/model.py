@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # Copyright 2017-present, Facebook, Inc.
 # All rights reserved.
+# Copyright 2019 Nihon Unisys, Ltd. 
 #
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
@@ -207,18 +208,32 @@ class DocReader(object):
         if self.use_cuda:
             inputs = [e if e is None else e.cuda(non_blocking=True)
                       for e in ex[:5]]
-            target_s = ex[5].cuda(non_blocking=True)
-            target_e = ex[6].cuda(non_blocking=True)
+            if self.args.multiple_answer:
+                target_offsets = ex[7].cuda(non_blocking=True)
+            else:
+                target_s = ex[5].cuda(non_blocking=True)
+                target_e = ex[6].cuda(non_blocking=True)
         else:
             inputs = [e if e is None else e for e in ex[:5]]
-            target_s = ex[5]
-            target_e = ex[6]
+            if self.args.multiple_answer:
+                target_offsets = ex[7]
+            else:
+                target_s = ex[5]
+                target_e = ex[6]
+        
+        if self.args.multiple_answer:
+            # Run forward
+            score_offsets = self.network(*inputs)
+            
+            # Compute loss and accuracies
+            loss = F.binary_cross_entropy(score_offsets, target_offsets)
+        
+        else:
+            # Run forward
+            score_s, score_e = self.network(*inputs)
 
-        # Run forward
-        score_s, score_e = self.network(*inputs)
-
-        # Compute loss and accuracies
-        loss = F.nll_loss(score_s, target_s) + F.nll_loss(score_e, target_e)
+            # Compute loss and accuracies
+            loss = F.nll_loss(score_s, target_s) + F.nll_loss(score_e, target_e)
 
         # Clear gradients and run backward
         self.optimizer.zero_grad()
@@ -258,7 +273,7 @@ class DocReader(object):
     # Prediction
     # --------------------------------------------------------------------------
 
-    def predict(self, ex, candidates=None, top_n=1, async_pool=None):
+    def predict(self, ex, candidates=None, top_n=1, threshold=0.5, async_pool=None):
         """Forward a batch of examples only to get predictions.
 
         Args:
@@ -266,6 +281,7 @@ class DocReader(object):
             candidates: batch * variable length list of string answer options.
               The model will only consider exact spans contained in this list.
             top_n: Number of predictions to return per batch element.
+            threshold: 
             async_pool: If provided, non-gpu post-processing will be offloaded
               to this CPU process pool.
         Output:
@@ -284,26 +300,41 @@ class DocReader(object):
                       for e in ex[:5]]
         else:
             inputs = [e for e in ex[:5]]
+        
+        if self.args.multiple_answer:
+            # Run forward
+            score_offsets = self.network(*inputs)
+            
+            # Decode predictions
+            score_offsets = score_offsets.data.cpu()
 
-        # Run forward
-        with torch.no_grad():
-            score_s, score_e = self.network(*inputs)
-
-        # Decode predictions
-        score_s = score_s.data.cpu()
-        score_e = score_e.data.cpu()
-        if candidates:
-            args = (score_s, score_e, candidates, top_n, self.args.max_len)
+            args = (score_offsets, top_n, threshold)
             if async_pool:
-                return async_pool.apply_async(self.decode_candidates, args)
+                return async_pool.apply_async(self.decode_multiple_answer, args)
             else:
-                return self.decode_candidates(*args)
+                return self.decode_multiple_answer(*args)
+                                
         else:
-            args = (score_s, score_e, top_n, self.args.max_len)
-            if async_pool:
-                return async_pool.apply_async(self.decode, args)
+            # Run forward
+            with torch.no_grad():
+                score_s, score_e = self.network(*inputs)
+
+            # Decode predictions
+            score_s = score_s.data.cpu()
+            score_e = score_e.data.cpu()
+            
+            if candidates:
+                args = (score_s, score_e, candidates, top_n, self.args.max_len)
+                if async_pool:
+                    return async_pool.apply_async(self.decode_candidates, args)
+                else:
+                    return self.decode_candidates(*args)
             else:
-                return self.decode(*args)
+                args = (score_s, score_e, top_n, self.args.max_len)
+                if async_pool:
+                    return async_pool.apply_async(self.decode, args)
+                else:
+                    return self.decode(*args)
 
     @staticmethod
     def decode(score_s, score_e, top_n=1, max_len=None):
@@ -391,6 +422,56 @@ class DocReader(object):
                 pred_score.append(scores[idx_sort])
         return pred_s, pred_e, pred_score
 
+    @staticmethod
+    def decode_multiple_answer(score_ans_offsets, top_n=10, threshold=0.5):
+        """Extract a sequence of words whose score is higher than the threshold
+
+        Args:
+            score_ans_offsets: offset predictions
+            top_n: number of top scored pairs to take
+            threshold: used to extract words
+        """
+        def get_top_chunks(in_arr):
+            chunks = []
+            start_idx, end_idx = -1, -1
+            for idx, val in enumerate(in_arr):
+                if val > threshold:
+                    if start_idx == -1:
+                        start_idx, end_idx = idx, idx
+                    else:
+                        end_idx = idx
+                else:
+                    if start_idx != -1:
+                        chunks.append((
+                            start_idx, end_idx,
+                            np.average(in_arr[start_idx:end_idx+1])))
+                        start_idx, end_idx = -1, -1
+            if start_idx != -1:
+                chunks.append((
+                    start_idx, end_idx,
+                    np.average(in_arr[start_idx:end_idx+1])))
+
+            chunks.sort(key=lambda x: x[2], reverse=True)
+
+            return chunks[:top_n]
+        
+        pred_s = []
+        pred_e = []
+        pred_ans_offsets = []
+        pred_score = []
+        for i in range(score_ans_offsets.size(0)):
+            scores = score_ans_offsets[i].numpy()
+            chunks = get_top_chunks(scores)
+            pred_s.append([])
+            pred_e.append([])
+            pred_score.append([])
+            for c in chunks:
+                pred_s[-1].append(c[0])
+                pred_e[-1].append(c[1])
+                pred_score[-1].append(c[2])
+
+        return pred_s, pred_e, pred_score
+        
     # --------------------------------------------------------------------------
     # Saving and loading
     # --------------------------------------------------------------------------

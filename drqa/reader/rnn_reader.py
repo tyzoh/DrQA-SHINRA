@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # Copyright 2017-present, Facebook, Inc.
 # All rights reserved.
+# Copyright 2019 Nihon Unisys, Ltd. 
 #
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
@@ -80,6 +81,7 @@ class RnnDocReader(nn.Module):
             doc_hidden_size,
             question_hidden_size,
             normalize=normalize,
+            multiple_answer=args.multiple_answer,
         )
         self.end_attn = layers.BilinearSeqAttn(
             doc_hidden_size,
@@ -128,8 +130,11 @@ class RnnDocReader(nn.Module):
         elif self.args.question_merge == 'self_attn':
             q_merge_weights = self.self_attn(question_hiddens, x2_mask)
         question_hidden = layers.weighted_avg(question_hiddens, q_merge_weights)
-
-        # Predict start and end positions
-        start_scores = self.start_attn(doc_hiddens, question_hidden, x1_mask)
-        end_scores = self.end_attn(doc_hiddens, question_hidden, x1_mask)
-        return start_scores, end_scores
+        
+        if self.args.multiple_answer:
+            return self.start_attn(doc_hiddens, question_hidden, x1_mask)
+        else:
+            # Predict start and end positions
+            start_scores = self.start_attn(doc_hiddens, question_hidden, x1_mask)
+            end_scores = self.end_attn(doc_hiddens, question_hidden, x1_mask)
+            return start_scores, end_scores

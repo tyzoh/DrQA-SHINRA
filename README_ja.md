@@ -1,18 +1,21 @@
 # DrQA-SHINRA
 
-DrQA-SHINRA is an implementation for extracting the values of the attributes from Wikipedia pages at SHINRA2018 using Facebook AI Research's [DrQA](<https://github.com/facebookresearch/DrQA>). [SHINRA](http://liat-aip.sakura.ne.jp/森羅/森羅wikipedia構造化プロジェクト2019/) is a project to structure Wikipedia knowledge and SHINRA2018 is a shared-task to extract the values of the pre-defined attributes from Japanese Wikipedia pages of 5 categories (person, company, city, airport and chemical compound).
-We tested DrQA-SHINRA on a part of the dataset of [SHINRA2019](http://liat-aip.sakura.ne.jp/森羅/森羅wikipedia構造化プロジェクト2019/森羅2019データ配布/) converting to SHINRA2018 format.
+Wikipediaに書かれている世界知識を計算機が扱えるような形に変換することを目的とした森羅プロジェクトの森羅2018タスクで用いた手法の実装です．森羅2018タスクは，人名，企業名，市区町村名，空港名，化合物名の5カテゴリのWikipediaページから，定義された属性の値を抽出するタスクです．本手法では，[DrQA](<https://github.com/facebookresearch/DrQA>)のDocument Readerをベースとして用い，属性名を質問，属性値を回答とする機械読解により属性値の抽出を行いました．
 
-## Usage
+[森羅2019のデータ](http://liat-aip.sakura.ne.jp/森羅/森羅wikipedia構造化プロジェクト2019/森羅2019データ配布/)を森羅2018形式に変換し，一部のデータで動作確認をしました．
 
-### Data download:
+## 使用方法
 
-Download the data set from [SHINRA2019 website](http://liat-aip.sakura.ne.jp/森羅/森羅wikipedia構造化プロジェクト2019/森羅2019データ配布/). The word vector can be downloaded from [fastText website](https://dl.fbaipublicfiles.com/fasttext/vectors-crawl/cc.ja.300.vec.gz).
+### データのダウンロード:
+
+データセットは， [森羅2019データ配布](http://liat-aip.sakura.ne.jp/森羅/森羅wikipedia構造化プロジェクト2019/森羅2019データ配布/)からダウンロードして，以下のように配置してください．単語ベクトルは[fastText website](https://dl.fbaipublicfiles.com/fasttext/vectors-crawl/cc.ja.300.vec.gz)からダウンロードできます．
+
+※森羅2018タスクで使用した単語ベクトルは，日本語Wikipedia全文をMeCabで空白区切りにしたファイルから[fastText](<https://github.com/facebookresearch/fastText>)を用いて作成したものです．
 
 ```
 DrQA-SHINRA
 |____ data                     
-|       |____ datasets              # need download from SHINRA2019 website
+|       |____ datasets              # 森羅2019のサイトからダウンロードするデータセット
 |       |   |____ annotation
 |       |   |       |____ Company_dist.json
 |       |   |         ...
@@ -20,42 +23,42 @@ DrQA-SHINRA
 |       |           |____ Company
 |       |           |       |____xxxxx.html
 |       |             ...
-|       |____ drqa-models           # train.sh outputs model files
+|       |____ drqa-models           # train.shがモデルファイルを出力するディレクトリ
 |       |____ embeddings        
-|       |   |____ cc.ja.300.vec     # need download from fastText website 
-|       |____ work                  # convert.sh outputs preprocessed files
-|____ drqa                          # main code
+|       |   |____ cc.ja.300.vec     # fastTextのサイトからダウンロードする単語ベクトル 
+|       |____ work                  # convert.shが前処理後のファイルを出力するディレクトリ
+|____ drqa                          # メインソースコード
 |____ scripts                       
-        |____ shinra                # scripts for SHINRA dataset
+        |____ shinra                # 森羅データセット用のスクリプト
 ```
 
-### Preprocess:
+### 前処理：
 
 ```
 sh scripts/shinra/convert.sh
 ```
 
-1. ```scripts/shinra/shinra2019_to_2018.py```
+3. ```scripts/shinra/shinra2019_to_2018.py```
 
-   Convert to a format similar to that of SHINRA2018 and create ```[target] _dist_2018.json``` file. In this process, the answer data for evaluation is also created with the name ```[target] _dist_2018-test.json```.
+   森羅2018のフォーマットと似た形式に変換し，```[target]_dist_2018.json```ファイルを作成します．このとき評価用の解答データも```[target]_dist_2018-test.json```という名前で作成します。
 
-2. ```scripts/shinra/shinra_to_squad.py```
+4. ```scripts/shinra/shinra_to_squad.py```
 
-   Convert A file to the format of SQuAD. In this process, Infobox data are converted to simple sentences and HTML tags are replaced with spaces. Using ```--addtitle True```(Default) option, attribute names are converted question sentence such as "Where is the location (pre-defined attribute name) of Narita International Airport (Wikipedia title)? (in Japanese)".
+   3で出力したファイルをSQuAD形式に変換します．Infoboxを自然文に置き換える処理と，HTMLタグをスペースに置換する処理を行います．```--addtitle True```(デフォルト)とすると，質問が"成田国際空港(Wikipediaタイトル)の所在地(属性名)は？"という文に変換されます．
 
-3. ```scripts/shinra/preprocess.py```
+5. ```scripts/shinra/preprocess.py```
 
-   Preprocess for DrQA Document Reader. Assertion Error will be output if the break of the word in MeCab does not match the offset of the answer. In this case, the answer will be not set in the training data.
+   DrQA Document Readerの前処理を実行します．MeCabの単語の切れ目と解答のOffsetが合わない場合，Assertion Errorが出力され，その解答は学習データに設定されません．
 
-### Train:
+### 学習：
 
 ```
 sh scripts/shinra/train.sh
 ```
 
-Run the process of training of the DrQA Document Reader. With ```--multiple-answer True```, the implementation for multiple answer will  be enabled. With ```--shinra-eval True```, validation function for SHINRA2018 be enabled.
+DrQA Document Readerの学習を実行します．```--multiple-answer True```とすると，複数回答対応版が動きます．```--shinra-eval True```とすると，森羅タスク用のValidationが実行されます．
 
-### Predict and Evaluate:
+### 予測と評価：
 
 ```
 sh scripts/shinra/predict.sh
@@ -63,29 +66,27 @@ sh scripts/shinra/predict.sh
 
 1. ```scripts/shinra/predict_shinra.py```
 
-   Run the process of prediction using the trained model. The results of the prediction will be output to ```squad_${target}-test-${model_fname}.preds.json```.
+   学習したモデルを用いた予測を実行します．予測結果は```squad_${target}-test-${model_fname}.preds.json```というファイルに出力されます．
 
 2. ```scripts/shinra/evaluate_shinra.py```
 
-   Regulation the prediction result output and output it to ```squad_${target}-test-${model_fname}.pred_eval.json```, and output the evaluation result to```eval_${target}-test-${model_fname}.log```.
+   1が出力した予測結果を整形して```squad_${target}-test-${model_fname}.pred_eval.json```に出力し，評価結果を```eval_${target}-test-${model_fname}.log```に出力します．
 
 
 
-```scripts/reader/validate_shinra.py``` used for validation during learning and ```scripts/shinra/evaluation.py``` used for calculation of evaluation results are provided by [Sansan, Inc.](<https://gist.github.com/kanjirz50/616b3a1c069dc4b0a4d9357457f6a105>)
+学習時のValidationに使用する```scripts/reader/validate_shinra.py```および，評価結果の算出に使用する```scripts/shinra/evaluation.py```は，[Sansan株式会社提供のスクリプト](<https://gist.github.com/kanjirz50/616b3a1c069dc4b0a4d9357457f6a105>)をベースにしています．
 
 
 
-## RESULTS:
+## 評価結果:
 
-The results of testing with the data of some categories of SINRA2019 are described below. The dataset was divided into train (85%), dev (5%) and test (10%) (train for learning, dev for model selection, and test for evaluation). 
+データセットを train (85%), dev (5%), test (10%)に分割し，学習にはtrain，モデル選択にdev，評価にtestを使用した結果を以下に記載します．
 
-The test machine was a GPU machine (4 cores / 8 T / 3.60 GHz, 64 GB memory, NVIDIA GeForce GTX 1080 Ti 11 GB). We commented out the validation of train data in train.py for saving time. 
+GPU搭載マシン(4 コア / 8 T / 3.60GHz, 64GB メモリ, NVIDIA GeForce GTX 1080 Ti 11GB)を使用しました． (時間短縮のため，train.pyのtrainデータに対するバリデーションのコードをコメントアウトして実行)
 
-Note: The attribute name of the results is Japanese.
+#### 企業名 (HTML):
 
-#### Company (HTML):
-
-* training time: 24 hours (Num train examples = 29925, Num dev examples = 1785)
+* 学習時間：約24時間 (学習サンプル数 = 29925, モデル選択サンプル数 = 1785)
 * embedding_file=cc.ja.300.vec
 * num-epochs=30 (best epoch = 22)
 * multiple_answer=True
@@ -134,9 +135,9 @@ micro-precision: 0.611 micro-recall: 0.325 micro-f1: 0.424
 macro-precision: 0.656 macro-recall: 0.554 macro-f1: 0.580
 ```
 
-#### Airport (HTML):
+#### 空港名 (HTML):
 
-* training time：5 hours (Num train examples = 12750, Num dev examples = 750)
+* 学習時間：約5時間 (学習サンプル数 = 12750, モデル選択サンプル数 = 750)
 * embedding_file=cc.ja.300.vec
 * num-epochs=30 (best epoch = 28)
 * multiple_answer=True
@@ -174,9 +175,9 @@ micro-precision: 0.834 micro-recall: 0.782 micro-f1: 0.807
 macro-precision: 0.740 macro-recall: 0.701 macro-f1: 0.715
 ```
 
-#### Compound (HTML):
+#### 化合物名 (HTML):
 
-* training time: 2.5 hours (Num train examples = 7620, Num dev examples = 450)
+* 学習時間：約2時間半 (学習サンプル数 = 7620, モデル選択サンプル数 = 450)
 * embedding_file=cc.ja.300.vec
 * num-epochs=30 (best epoch = 29)
 * multiple_answer=True
@@ -205,7 +206,7 @@ micro-precision: 0.496 micro-recall: 0.465 micro-f1: 0.480
 macro-precision: 0.580 macro-recall: 0.540 macro-f1: 0.548
 ```
 
-### reference:
+### 参考文献:
 
 [1] [Reading Wikipedia to Answer Open-Domain Questions](https://arxiv.org/abs/1704.00051)
 
@@ -213,24 +214,24 @@ macro-precision: 0.580 macro-recall: 0.540 macro-f1: 0.548
 
 [3] [SHINRA: Structuring Wikipedia by Collaborative Contribution](<https://openreview.net/pdf?id=HygfXWqTpm>)
 
-[4] [Information Extraction from Wikipedia by Machine Reading (in Japanese)](<https://www.anlp.jp/proceedings/annual_meeting/2019/pdf_dir/P1-34.pdf>)
+[4] [機械読解によるWikipediaからの情報抽出](<https://www.anlp.jp/proceedings/annual_meeting/2019/pdf_dir/P1-34.pdf>)
 
-## Installing DrQA-SHINRA
+## インストール
 
-DrQA-SHINRA requires Linux/OSX and Python 3.5 or higher. It also requires installing [PyTorch](http://pytorch.org/) version 1.0. Its other dependencies are listed in requirements.txt. CUDA is strongly recommended for speed, but not necessary.
+DrQA-SHINRA は，Linux/OSX と Python 3.5以上，[PyTorch](http://pytorch.org/) version 1.0で動作します. その他の必要なソフトウェアはrequirements.txtに記載されています. CUDA は処理速度のために推奨されますが，必須ではありません．
 
-Run the following commands to clone the repository and install DrQA-SHINRA:
+以下のコマンドを実行し，リポジトリをクローン後，インスト―ルしてください．
 
 ```bash
 git clone https://github.com/tyzoh/DrQA-SHINRA.git
 cd DrQA-SHINRA; pip install -r requirements.txt; python setup.py develop
 ```
 
-Note: requirements.txt includes a subset of all the possible required packages. Depending on what you want to run, you might need to install an extra package (e.g. MeCab).
+requirements.txt に記載されている以外の，MeCab等のインストールは必要に応じて個別に行ってください．
 
 ## License
 
-DrQA-SHINRA is BSD-licensed based on [DrQA](https://github.com/facebookresearch/DrQA). However, the following scripts is MIT-licensed based on [Sansan's script](<https://gist.github.com/kanjirz50/616b3a1c069dc4b0a4d9357457f6a105>).
+DrQA-SHINRA は[DrQA](https://github.com/facebookresearch/DrQA)のBSDライセンスを継承しています. ただし， [Sansan株式会社提供のスクリプト](<https://gist.github.com/kanjirz50/616b3a1c069dc4b0a4d9357457f6a105>)をベースとした以下のスクリプトはMITライセンスで提供されます．
 
 * scripts/reader/validate_shinra.py
 * scripts/shinra/evaluation.py

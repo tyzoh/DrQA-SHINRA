@@ -20,6 +20,7 @@ def set_default(key, value):
 from .corenlp_tokenizer import CoreNLPTokenizer
 from .regexp_tokenizer import RegexpTokenizer
 from .simple_tokenizer import SimpleTokenizer
+from .mecab_tokenizer import MecabTokenizer
 
 # Spacy is optional
 try:
@@ -37,6 +38,8 @@ def get_class(name):
         return RegexpTokenizer
     if name == 'simple':
         return SimpleTokenizer
+    if name == 'mecab':
+        return MecabTokenizer
 
     raise RuntimeError('Invalid tokenizer: %s' % name)
 

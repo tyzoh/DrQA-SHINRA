@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # Copyright 2017-present, Facebook, Inc.
 # All rights reserved.
+# Copyright 2019 Nihon Unisys, Ltd. 
 #
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
@@ -63,7 +64,11 @@ def vectorize(ex, model, single_answer=False):
     # Maybe return without target
     if 'answers' not in ex:
         return document, features, question, ex['id']
-
+    
+    answer_offsets = None
+    if 'answer_offsets' in ex:
+        answer_offsets = torch.LongTensor(ex['answer_offsets'])
+    
     # ...or with target(s) (might still be empty if answers is empty)
     if single_answer:
         assert(len(ex['answers']) > 0)
@@ -72,8 +77,11 @@ def vectorize(ex, model, single_answer=False):
     else:
         start = [a[0] for a in ex['answers']]
         end = [a[1] for a in ex['answers']]
-
-    return document, features, question, start, end, ex['id']
+    
+    if args.multiple_answer:
+        return document, features, question, start, end, answer_offsets, ex['id']
+    else:
+        return document, features, question, start, end, ex['id']
 
 
 def batchify(batch):
@@ -88,13 +96,13 @@ def batchify(batch):
     questions = [ex[2] for ex in batch]
 
     # Batch documents and features
-    max_length = max([d.size(0) for d in docs])
-    x1 = torch.LongTensor(len(docs), max_length).zero_()
-    x1_mask = torch.ByteTensor(len(docs), max_length).fill_(1)
+    d_max_length = max([d.size(0) for d in docs])
+    x1 = torch.LongTensor(len(docs), d_max_length).zero_()
+    x1_mask = torch.ByteTensor(len(docs), d_max_length).fill_(1)
     if features[0] is None:
         x1_f = None
     else:
-        x1_f = torch.zeros(len(docs), max_length, features[0].size(1))
+        x1_f = torch.zeros(len(docs), d_max_length, features[0].size(1))
     for i, d in enumerate(docs):
         x1[i, :d.size(0)].copy_(d)
         x1_mask[i, :d.size(0)].fill_(0)
@@ -102,9 +110,9 @@ def batchify(batch):
             x1_f[i, :d.size(0)].copy_(features[i])
 
     # Batch questions
-    max_length = max([q.size(0) for q in questions])
-    x2 = torch.LongTensor(len(questions), max_length).zero_()
-    x2_mask = torch.ByteTensor(len(questions), max_length).fill_(1)
+    q_max_length = max([q.size(0) for q in questions])
+    x2 = torch.LongTensor(len(questions), q_max_length).zero_()
+    x2_mask = torch.ByteTensor(len(questions), q_max_length).fill_(1)
     for i, q in enumerate(questions):
         x2[i, :q.size(0)].copy_(q)
         x2_mask[i, :q.size(0)].fill_(0)
@@ -121,6 +129,26 @@ def batchify(batch):
         else:
             y_s = [ex[3] for ex in batch]
             y_e = [ex[4] for ex in batch]
+        return x1, x1_f, x1_mask, x2, x2_mask, y_s, y_e, ids
+    
+    elif len(batch[0]) == NUM_INPUTS + NUM_EXTRA + NUM_TARGETS + 1:
+        if torch.is_tensor(batch[0][5]):
+            y_offset = torch.FloatTensor(len(docs), d_max_length).zero_()
+            for i, offset in enumerate([ex[5] for ex in batch]):
+              y_offset[i, :offset.size(0)].copy_(offset)
+        else:
+            y_offset = [[0] * d_max_length] * len(docs)
+            for i, offset in enumerate([ex[5] for ex in batch]):
+              y_offset[i, :len(offset)] = offset
+
+        if torch.is_tensor(batch[0][3]):
+            y_s = torch.cat([ex[3] for ex in batch])
+            y_e = torch.cat([ex[4] for ex in batch])
+        else:
+            y_s = [ex[3] for ex in batch]
+            y_e = [ex[4] for ex in batch]
+        return x1, x1_f, x1_mask, x2, x2_mask, y_s, y_e, y_offset, ids
+
     else:
         raise RuntimeError('Incorrect number of inputs per example.')
 

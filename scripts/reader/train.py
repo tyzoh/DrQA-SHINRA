@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # Copyright 2017-present, Facebook, Inc.
 # All rights reserved.
+# Copyright 2019 Nihon Unisys, Ltd. 
 #
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
@@ -114,7 +115,8 @@ def add_train_args(parser):
                          help='Log state after every <display_iter> epochs')
     general.add_argument('--sort-by-len', type='bool', default=True,
                          help='Sort batches by length for speed')
-
+    general.add_argument('--shinra-eval', type='bool', default=False,
+                         help='Validate for SHINRA dataset')
 
 def set_defaults(args):
     """Make sure the commandline arguments are initialized properly."""
@@ -221,7 +223,7 @@ def train(args, data_loader, model, global_stats):
         if idx % args.display_iter == 0:
             logger.info('train: Epoch = %d | iter = %d/%d | ' %
                         (global_stats['epoch'], idx, len(data_loader)) +
-                        'loss = %.2f | elapsed time = %.2f (s)' %
+                        'loss = %.6f | elapsed time = %.2f (s)' %
                         (train_loss.avg, global_stats['timer'].time()))
             train_loss.reset()
 
@@ -364,7 +366,10 @@ def main(args):
     # DATA
     logger.info('-' * 100)
     logger.info('Load data files')
-    train_exs = utils.load_data(args, args.train_file, skip_no_answer=True)
+    if args.multiple_answer:
+        train_exs = utils.load_data(args, args.train_file, skip_no_answer=False)
+    else:
+        train_exs = utils.load_data(args, args.train_file, skip_no_answer=True)
     logger.info('Num train examples = %d' % len(train_exs))
     dev_exs = utils.load_data(args, args.dev_file)
     logger.info('Num dev examples = %d' % len(dev_exs))
@@ -376,7 +381,10 @@ def main(args):
         dev_texts = utils.load_text(args.dev_json)
         dev_offsets = {ex['id']: ex['offsets'] for ex in dev_exs}
         dev_answers = utils.load_answers(args.dev_json)
-
+    
+    if args.shinra_eval:
+        import validate_shinra
+        
     # --------------------------------------------------------------------------
     # MODEL
     logger.info('-' * 100)
@@ -436,7 +444,10 @@ def main(args):
     # Two datasets: train and dev. If we sort by length it's faster.
     logger.info('-' * 100)
     logger.info('Make data loaders')
-    train_dataset = data.ReaderDataset(train_exs, model, single_answer=True)
+    if args.multiple_answer:
+        train_dataset = data.ReaderDataset(train_exs, model, single_answer=False)
+    else:
+        train_dataset = data.ReaderDataset(train_exs, model, single_answer=True)
     if args.sort_by_len:
         train_sampler = data.SortedBatchSampler(train_dataset.lengths(),
                                                 args.batch_size,
@@ -483,17 +494,21 @@ def main(args):
 
         # Train
         train(args, train_loader, model, stats)
+        
+        if args.shinra_eval:
+            validate_shinra.validate(args, train_loader, model, stats, mode='train')
+            result = validate_shinra.validate(args, dev_loader, model, stats, mode='dev')
+        else:                               
+            # Validate unofficial (train)
+            validate_unofficial(args, train_loader, model, stats, mode='train')
 
-        # Validate unofficial (train)
-        validate_unofficial(args, train_loader, model, stats, mode='train')
+            # Validate unofficial (dev)
+            result = validate_unofficial(args, dev_loader, model, stats, mode='dev')
 
-        # Validate unofficial (dev)
-        result = validate_unofficial(args, dev_loader, model, stats, mode='dev')
-
-        # Validate official
-        if args.official_eval:
-            result = validate_official(args, dev_loader, model, stats,
-                                       dev_offsets, dev_texts, dev_answers)
+            # Validate official
+            if args.official_eval:
+                result = validate_official(args, dev_loader, model, stats,
+                                           dev_offsets, dev_texts, dev_answers)
 
         # Save best valid
         if result[args.valid_metric] > stats['best_valid']:

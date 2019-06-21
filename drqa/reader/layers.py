@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # Copyright 2017-present, Facebook, Inc.
 # All rights reserved.
+# Copyright 2019 Nihon Unisys, Ltd. 
 #
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
@@ -218,9 +219,10 @@ class BilinearSeqAttn(nn.Module):
     Optionally don't normalize output weights.
     """
 
-    def __init__(self, x_size, y_size, identity=False, normalize=True):
+    def __init__(self, x_size, y_size, identity=False, normalize=True, multiple_answer=False):
         super(BilinearSeqAttn, self).__init__()
         self.normalize = normalize
+        self.multiple_answer = multiple_answer
 
         # If identity is true, we just use a dot product without transformation.
         if not identity:
@@ -241,7 +243,9 @@ class BilinearSeqAttn(nn.Module):
         xWy = x.bmm(Wy.unsqueeze(2)).squeeze(2)
         xWy.data.masked_fill_(x_mask.data, -float('inf'))
         if self.normalize:
-            if self.training:
+            if self.multiple_answer:
+                alpha = torch.sigmoid(xWy)
+            elif self.training:
                 # In training we output log-softmax for NLL
                 alpha = F.log_softmax(xWy, dim=-1)
             else:

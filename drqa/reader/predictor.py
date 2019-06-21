@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # Copyright 2017-present, Facebook, Inc.
 # All rights reserved.
+# Copyright 2019 Nihon Unisys, Ltd. 
 #
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
@@ -88,7 +89,7 @@ class Predictor(object):
         results = self.predict_batch([(document, question, candidates,)], top_n)
         return results[0]
 
-    def predict_batch(self, batch, top_n=1):
+    def predict_batch(self, batch, top_n=1, threshold=0.5):
         """Predict a batch of document - question pairs."""
         documents, questions, candidates = [], [], []
         for b in batch:
@@ -126,7 +127,7 @@ class Predictor(object):
 
         # Build the batch and run it through the model
         batch_exs = batchify([vectorize(e, self.model) for e in examples])
-        s, e, score = self.model.predict(batch_exs, candidates, top_n)
+        s, e, score = self.model.predict(batch_exs, candidates, top_n, threshold)
 
         # Retrieve the predicted spans
         results = []
@@ -134,7 +135,14 @@ class Predictor(object):
             predictions = []
             for j in range(len(s[i])):
                 span = d_tokens[i].slice(s[i][j], e[i][j] + 1).untokenize()
-                predictions.append((span, score[i][j].item()))
+                #predictions.append((span, score[i][j].item()))
+                #predictions.append(({"answer_start": s[i][j], "text": span}, score[i][j].item()))
+                answer_line_offsets = d_tokens[i].slice(s[i][j], e[i][j] + 1).line_offsets()
+                s_line, s_offset = answer_line_offsets[0]
+                e_line = answer_line_offsets[-1][0]
+                e_offset = answer_line_offsets[-1][1]+len(d_tokens[i].words()[e[i][j]])
+                
+                predictions.append(({"start": {"line_id": s_line, "offset": s_offset}, "end": {"line_id": e_line, "offset": e_offset}, "text": span}, score[i][j].item()))
             results.append(predictions)
         return results
 
