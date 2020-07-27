@@ -5,7 +5,7 @@ label=multipleanswer
 target=Company
 
 data_dir=./data
-datasets_dir=${data_dir}/datasets
+datasets_dir=${data_dir}/JP-5
 work_dir=${data_dir}/work
 work_label_dir=${work_dir}/${mode}-${label}
 mkdir ${work_dir}
@@ -16,8 +16,7 @@ multiple_answer=" --multiple-answer"
 python scripts/shinra/shinra2019_to_2018.py ${datasets_dir}/annotation/${target}_dist.json ${work_dir}/${target}_dist_2018.json
 
 # Convert to SQuAD format
-python scripts/shinra/shinra_to_squad.py ${work_dir}/${target}_dist_2018.json ${work_label_dir}/squad_${target}.json ${multiple_answer}
-
+python scripts/shinra/shinra_to_squad.py ${work_dir}/${target}_dist_2018.json ${work_label_dir}/squad_${target}.json ${multiple_answer} --html_dir ${datasets_dir}/HTML/ --category ${target}
 # Preprocess SQuAD format data for DrQA
 python scripts/shinra/preprocess.py ${work_label_dir} ${work_label_dir} --split squad_${target}-dev --tokenizer mecab${multiple_answer}
 python scripts/shinra/preprocess.py ${work_label_dir} ${work_label_dir} --split squad_${target}-test --tokenizer mecab${multiple_answer}

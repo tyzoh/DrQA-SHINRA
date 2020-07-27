@@ -1,18 +1,18 @@
 # DrQA-SHINRA
 
-DrQA-SHINRA is an implementation for extracting the values of the attributes from Wikipedia pages at SHINRA2018 using Facebook AI Research's [DrQA](<https://github.com/facebookresearch/DrQA>). [SHINRA](http://liat-aip.sakura.ne.jp/森羅/森羅wikipedia構造化プロジェクト2019/) is a project to structure Wikipedia knowledge and SHINRA2018 is a shared-task to extract the values of the pre-defined attributes from Japanese Wikipedia pages of 5 categories (person, company, city, airport and chemical compound).
-We tested DrQA-SHINRA on a part of the dataset of [SHINRA2019](http://liat-aip.sakura.ne.jp/森羅/森羅wikipedia構造化プロジェクト2019/森羅2019データ配布/) converting to SHINRA2018 format.
+DrQA-SHINRA is an implementation for extracting the values of the attributes from Wikipedia pages at SHINRA2018 using Facebook AI Research's [DrQA](<https://github.com/facebookresearch/DrQA>). [SHINRA](http://shinra-project.info/shinra2019/) is a project to structure Wikipedia knowledge and SHINRA2018 is a shared-task to extract the values of the pre-defined attributes from Japanese Wikipedia pages of 5 categories (person, company, city, airport and chemical compound).
+We tested DrQA-SHINRA on a part of the dataset of [SHINRA2019](http://shinra-project.info/download/) converting to SHINRA2018 format.
 
 ## Usage
 
 ### Data download:
 
-Download the data set from [SHINRA2019 website](http://liat-aip.sakura.ne.jp/森羅/森羅wikipedia構造化プロジェクト2019/森羅2019データ配布/). The word vector can be downloaded from [fastText website](https://dl.fbaipublicfiles.com/fasttext/vectors-crawl/cc.ja.300.vec.gz).
+Download the data set from [SHINRA2019 website](http://shinra-project.info/download/). The word vector can be downloaded from [fastText website](https://dl.fbaipublicfiles.com/fasttext/vectors-crawl/cc.ja.300.vec.gz).
 
 ```
 DrQA-SHINRA
 |____ data                     
-|       |____ datasets              # need download from SHINRA2019 website
+|       |____ JP-5              # need download from SHINRA2019 website
 |       |   |____ annotation
 |       |   |       |____ Company_dist.json
 |       |   |         ...
@@ -22,7 +22,7 @@ DrQA-SHINRA
 |       |             ...
 |       |____ drqa-models           # train.sh outputs model files
 |       |____ embeddings        
-|       |   |____ cc.ja.300.vec     # need download from fastText website 
+|       |   |____ cc.ja.300.vec     # need download from fastText website
 |       |____ work                  # convert.sh outputs preprocessed files
 |____ drqa                          # main code
 |____ scripts                       
@@ -77,9 +77,9 @@ sh scripts/shinra/predict.sh
 
 ## RESULTS:
 
-The results of testing with the data of some categories of SINRA2019 are described below. The dataset was divided into train (85%), dev (5%) and test (10%) (train for learning, dev for model selection, and test for evaluation). 
+The results of testing with the data of some categories of SINRA2019 are described below. The dataset was divided into train (85%), dev (5%) and test (10%) (train for learning, dev for model selection, and test for evaluation).
 
-The test machine was a GPU machine (4 cores / 8 T / 3.60 GHz, 64 GB memory, NVIDIA GeForce GTX 1080 Ti 11 GB). We commented out the validation of train data in train.py for saving time. 
+The test machine was a GPU machine (4 cores / 8 T / 3.60 GHz, 64 GB memory, NVIDIA GeForce GTX 1080 Ti 11 GB). We commented out the validation of train data in train.py for saving time.
 
 Note: The attribute name of the results is Japanese.
 

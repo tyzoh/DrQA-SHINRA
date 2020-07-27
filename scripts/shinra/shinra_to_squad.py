@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Copyright 2019, Nihon Unisys, Ltd.
 #
-# This source code is licensed under the BSD license. 
+# This source code is licensed under the BSD license.
 
 import argparse
 import json
@@ -26,7 +26,7 @@ def replace_html_tag(html_data):
             break
         if is_content and not is_comment and line.startswith('<!--') and not '-->' in line:
             is_comment = True
-        
+
         if not is_content or is_comment:
             iterator = except_nextline_pattern.finditer(line)
             line = list(line)
@@ -46,9 +46,9 @@ def replace_html_tag(html_data):
                     line[match.start():match.end()] = ['。']+[' ']*(match.end()-match.start()-1)
                     in_table_tag = False
                     continue
-                    
+
                 line[match.start():match.end()] = [' ']*(match.end()-match.start())
-            
+
             content.append(''.join(line)+'\n')
 
         if is_comment and '-->' in line:
@@ -60,27 +60,27 @@ def process(dataset, filedir, multiple_answer=False, addtitle=True):
 
     data_size = len(dataset['entry'])
     squad_data = []
-    
+
     for i, entry in enumerate(dataset['entry']):
-    
+
         ENE = entry['ENE']
         title = entry['title']
         page_id = entry['page_id']
         attributes = entry['Attributes_html']
-        
+
         print('-'*5, str(i) + '/' + str(data_size), str(page_id), title, '-'*5)
-        
+
         with filedir.joinpath(str(page_id)+'.html').open() as f:
             html_content = f.read()
-        
+
         content = replace_html_tag(html_content)
-                        
+
         if not multiple_answer:
             content = 'φ'+content[1:]
-        
+
         q_idx = 0
         qas = []
-        
+
         for k,v in attributes.items():
             if addtitle:
                 q = title + 'の' + k + 'は？'
@@ -92,11 +92,11 @@ def process(dataset, filedir, multiple_answer=False, addtitle=True):
             found_answers = set()
             for ans in v:
                 answers.append({"answer_start": ans['start'], "answer_end": ans['end'], "text": ans['text']})
-            
+
             if not multiple_answer and len(answers) == 0:
                 answers.append({"answer_start": 0, "text": 'φ'})
             qas.append({"answers": answers, "question": q, "id": q_id})
-        
+
         squad_json = {"title": title, 'WikipediaID': page_id, "ENE":ENE, "paragraphs": [{"context": content, "qas": qas}]}
         squad_data.append(squad_json)
     return squad_data
@@ -106,6 +106,10 @@ def main():
     parser.register('type', 'bool', util.str2bool)
     parser.add_argument('input', type=str)
     parser.add_argument('output', type=str)
+    parser.add_argument('--category', type=str, default='',
+                        help='category name')
+    parser.add_argument('--html_dir', type=str, default='./data/JP-5/HTML/',
+                        help='HTML data directory path')
     parser.add_argument('--multiple-answer', action='store_true',
                         help='convert for multiple answers model')
     parser.add_argument('--addtitle', type='bool', default=True,
@@ -117,6 +121,10 @@ def main():
 
     args = parser.parse_args()
 
+    if not args.category:
+        p = Path(inputfile)
+        args.category = p.stem.replace('_dist_2018','')
+
     squad_data_all = []
     squad_json_train = []
     squad_json_dev = []
@@ -124,9 +132,7 @@ def main():
     for inputfile in args.input.split(','):
         with open(inputfile) as f:
             shinra_dataset = json.load(f)
-            
-            p = Path(inputfile)
-            filedir=p.parent.parent.joinpath('datasets/HTML/'+p.stem.replace('_dist_2018',''))
+            filedir=Path(args.html_dir).joinpath(args.category)
             squad_data = process(shinra_dataset, filedir, multiple_answer=args.multiple_answer, addtitle=args.addtitle)
 
             squad_data_all.extend(squad_data)
@@ -134,7 +140,7 @@ def main():
             squad_json_train.extend(split_dataset[0])
             squad_json_dev.extend(split_dataset[1])
             squad_json_test.extend(split_dataset[2])
-            
+
     with open(args.output, 'w') as f:
         f.write(json.dumps({"data": squad_data_all}, sort_keys=True, ensure_ascii=False)) #for formal run
 
